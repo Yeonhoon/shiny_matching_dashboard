@@ -103,14 +103,24 @@ shiny::shinyServer(function(input, output, session){
                                scrollX = T
                 ))
     })
-    shinyalert::shinyalert("Good!", "Data has been imported.",
-                           type = 'success')
+    shinyWidgets::show_alert(
+      type='success',
+      title='Success !!',
+      text = "Data has been imported.")
     
     # refresh results
-    
-    updateSelectInput(session, 'trt', label='Target Variable', 
-                      choices = c(Vars="",names(rv$data)), selected = NA)
-    updateSelectInput(session, 'match', label='Matching Variable',choices = names(rv$data), selected=NA)
+    shinyWidgets::updatePickerInput(session, 'trt', label='Target Variable',
+                                    choices = names(rv$data),
+                                    options = list(size=5,
+                                                   title="Select a target variable"))
+    shinyWidgets::updatePickerInput(session, 'match', label='Matching Variables',
+                                    choices = names(rv$data),
+                                    options = list(size=5,
+                                                   `actions-box`=T,
+                                                   title="Select matching variables"))
+    # updateSelectInput(session, 'trt', label='Target Variable', 
+    #                   choices = c(`Select a variable`="",names(rv$data)), selected = NA)
+    # updateSelectInput(session, 'match', label='Matching Variables',choices = names(rv$data), selected=NA)
     
     # structure of data
     output$strData <- renderDT({
@@ -145,17 +155,43 @@ shiny::shinyServer(function(input, output, session){
     }
   })
   
+  
+  # Exclude Treatment variable on matching vars
+  observeEvent(input$trt,{
+    vars <- setdiff(names(rv$data),input$trt)
+    shinyWidgets::updatePickerInput(session,'match',
+                      label = "Matching Variables",
+                      selected=NA,
+                      choices=vars)
+  })
+  
+  observeEvent(input$outcome, {
+    vars <- setdiff(names(matchingData$data),input$outcome)
+    shinyWidgets::updatePickerInput(session,'covariate',
+                      label = 'Covariate variables',
+                      selected=NA,
+                      choices = vars)
+  })
+  
+  # matching info
+  observeEvent(input$startMatching, {
+    output$matchingInfo <- renderPrint({
+      print(result())
+    })
+    
+    output$renderMatchingInfo <- renderUI({
+      verbatimTextOutput('matchingInfo')
+    })
+  })
+  
   # loveplot --------------------------------
   observeEvent(input$startMatching,{
-    shinyjs::toggle(id='hidden2', condition = F)
-    if(nchar(input$startMatching)>0){
-      show('hidden2')
-      toggle(id='hidden2',condition=T)
-      
       output$lovePlot <- renderPlot({
         tryCatch({
-          shinyalert::shinyalert("Good!",'Macting was successful !!',
-                                 type = 'success')
+          shinyWidgets::show_alert(
+            type='success',
+            title='Success !!',
+            text = "Matching succeeded")
           cobalt::love.plot(result(),
                             stars='raw',
                             drop.distance = T,
@@ -182,29 +218,20 @@ shiny::shinyServer(function(input, output, session){
         
         )
       })
-    }
+      output$renderLovePlot <- renderUI({
+        plotOutput('lovePlot')
+      })
   })
   
-  
-
 # bal.plot ----------------------------------------------------------------
 
   observeEvent(input$startMatching,{
-    if(nchar(input$startMatching)>0){
-      shinyjs::toggle(id='hidden1', condition = F)
-      show('hidden1')
       updateBoxSidebar("sidebar",session=session)
       updateSelectInput(session=session, 
                       inputId = 'matchedVars', 
                       label='Matched variables',
                       choices = input$match)
-        }
-      })  
       
-  observeEvent(input$update,{
-    if(input$update){
-      show('hidden1')
-      toggle(id='hidden1',condition=T)
       output$mResult <- renderPlot({
         cobalt::bal.plot(result(),
                          var.name=input$matchedVars,
@@ -214,13 +241,32 @@ shiny::shinyServer(function(input, output, session){
                                  axis.text.x= element_text(size=13, family='serif'),
                                  legend.text = element_text(size=13)) )
       })
-    }
+      
+      output$renderMatchingVar <- renderUI({
+        plotOutput('mResult')
+      })
+  })  
+      
+  observeEvent(input$update,{
+      # output$mResult <- renderPlot({
+      #   cobalt::bal.plot(result(),
+      #                    var.name=input$matchedVars,
+      #                    which = 'both',
+      #                    themes = ggthemes::theme_stata() + 
+      #                      theme(axis.text.y = element_text(angle=0,size=13,family = 'serif'),
+      #                            axis.text.x= element_text(size=13, family='serif'),
+      #                            legend.text = element_text(size=13)) )
+      # })
+      
+      output$renderMatchingVar <- renderUI({
+        plotOutput('mResult')
+      })
   })
 
 
 # result -------------------------------------------------------------------------
 
-  #매칭 데이터 사용
+  #매칭 데이터 사용 시 selector update
   observeEvent(input$startMatching,{
     matchingData$data <- match.data(object = result(),
                                     distance = 'prop.score', 
@@ -235,10 +281,11 @@ shiny::shinyServer(function(input, output, session){
   })
   
 # Create formula ------------------------------------------------
+  
   matchFit <- eventReactive(input$startReg,{
     req(input$outcome, input$covariate)
     temp <- ""
-    for(i in matchingData[[input$covariate]]){
+    for(i in input$covariate){
       if(is.character(matchingData$data[[i]])){
         matchingData$data[[i]] <- as.factor(matchingData$data[[i]])
       }
@@ -248,8 +295,8 @@ shiny::shinyServer(function(input, output, session){
     }
     
     if(length(input$covariate)>0) {
-      if(input$regType=='logistic'){
-        temp <- paste0(input$outcome,'~', stringr::str_c(input$covariate, collapse = "+"))
+      if(input$regType=='Logistic'){
+        temp <- paste0(input$outcome,'~', paste0(input$covariate, collapse = "+"))
         if(input$doStrata){
           rst <- listReg(data = matchingData$data,
                          regType = 'logistic',
@@ -263,7 +310,7 @@ shiny::shinyServer(function(input, output, session){
           GTTab(rst)
         }
       } else {
-        temp <- paste0("Surv(",input$duration,",", input$outcome,")",'~', stringr::str_c(input$covariate, collapse = "+"))
+        temp <- paste0("Surv(",input$duration,",", input$outcome,")",'~', paste0(input$covariate, collapse = "+"))
         if (input$doStrata){
           rst <- listReg(data = matchingData$data,regType = 'cox',
                          formula = myEval(temp),
@@ -273,6 +320,51 @@ shiny::shinyServer(function(input, output, session){
           GTTab(x, strata = input$strata)
         } else {
           rst <- uniReg(matchingData$data,regType = 'cox', formula = myEval(temp))
+          GTTab(rst)
+        }
+      }
+    }
+  })
+  
+  unmatchedFit <- eventReactive(input$startReg,{
+    req(input$outcome, input$covariate)
+    temp <- ""
+    for(i in input$covariate){
+      if(is.character(rv$data[[i]])){
+        rv$data[[i]] <- as.factor(rv$data[[i]])
+      }
+    }
+    if(is.character(rv$data[[input$outcome]])) {
+      rv$data[[input$outcome]] <- as.factor(rv$data[[input$outcome]]) 
+    }
+    if(length(input$covariate)>0) {
+      # logistic
+      if(input$regType=='Logistic'){
+        temp <- paste0(input$outcome,'~', paste0(input$covariate, collapse = "+"))
+        if(input$doStrata){
+          rst <- listReg(data = rv$data,
+                         regType = 'logistic',
+                         formula = myEval(temp),
+                         strata = rv$data[[input$strata]])
+          x <- tbl_merge(rst,
+                         tab_spanner = names(rst))
+          GTTab(x, strata = input$strata)
+        } else {
+          rst <- uniReg(rv$data,regType = 'logistic', formula = myEval(temp))
+          GTTab(rst)
+        }
+        # cox
+      } else {
+        temp <- paste0("Surv(",input$duration,",", input$outcome,")",'~', paste0(input$covariate, collapse = "+"))
+        if (input$doStrata){
+          rst <- listReg(data = rv$data,regType = 'cox',
+                         formula = myEval(temp),
+                         strata = rv$data[[input$strata]])
+          x <- tbl_merge(rst,
+                         tab_spanner = names(rst))
+          GTTab(x, strata = input$strata)
+        } else {
+          rst <- uniReg(rv$data,regType = 'cox', formula = myEval(temp))
           GTTab(rst)
         }
       }
@@ -296,10 +388,106 @@ shiny::shinyServer(function(input, output, session){
     output$matchingResult <- render_gt({
       matchFit()
     })
+    
+    output$unmatchingResult <- render_gt({
+      unmatchedFit()
+    })
+    
+    # output$matchingKM <- renderPlotly({
+    #   fit = survfit(Surv(input$duration, input$outcome) ~ input$covariate, data=matchingData$data)
+    #   survminer::ggsurvplot(fit)
+    # })
+    
   })
   
-  output$renderResult <- renderUI({
+  output$renderMatchingResult <- renderUI({
+    withProgress('Creating Tables', min = 0, max=100, value = 0)
     gt_output('matchingResult')
   })
+  
+  output$renderUnmatcheResult <- renderUI({
+    withProgress('Creating Tables', min = 0, max=100, value = 0)
+    gt_output('unmatchingResult')
+  })
+  
+  # output$renderMatchingKMPlot <- renderUI({
+  #   plotlyOutput('matchingKM')
+  # })
+  
+
+  
+# Reset -------------------------------------------------------------------
+  observeEvent(input$reset,{
+    shinyWidgets::ask_confirmation(
+      inputId = "confirmReset",
+      session = session,
+      title="Warning",
+      type = 'warning',
+      text="Reset all variables?",
+      btn_labels = c("Cancel", "Reset"),
+      btn_colors = c("#DDDDDD", "#FE2E2E"),
+      html=T,
+      closeOnClickOutside=T,
+      showCloseButton=T
+    )
+  })
+  
+  observeEvent(input$confirmReset,{
+    if(input$confirmReset){
+      updateSelectInput(session, 'trt', label='Target Variable', 
+                        choices = c(`Select a variable`="",names(rv$data)), selected = NA)
+      updateSelectInput(session, 'match', label='Matching Variable',choices = names(rv$data), selected=NA)
+      updateSelectInput(session=session, 
+                        inputId = 'matchedVars', 
+                        label='Matched variables')
+      updateBoxSidebar("sidebar",session=session)
+      output$renderLovePlot <- renderUI(NULL)
+      output$renderMatchingInfo <- renderUI(NULL)
+      output$renderMatchingVar <- renderUI(NULL)
+      updateSelectInput(inputId='ratioValue', label='Ratio', choices = c(1, 2, 3,4,5), selected = 1)
+      updateSliderInput(inputId = 'caliperValue', label = 'Caliper', value = 0, min=0, max=0.5, step = 0.1)
+      updateSelectInput(session, 'outcome', label='Outcome Variable',choices = names(matchingData$data), selected=NA)
+      updateSelectInput(session, 'covariate', label='Covariates',choices = names(matchingData$data))
+      updateSelectInput(session, 'duration', label='Duration Variable',choices = names(matchingData$data))
+      updateSelectInput(session, 'strata', label='Stratification Variable',
+                        choices = names(matchingData$data[,!sapply(matchingData$data,is.numeric),with=F]),
+                        selected=NA)
+      output$renderUnmatcheResult <- renderUI(NULL)
+      output$renderMatchingResult <- renderUI(NULL)
+    }
+  })
+  
+  observeEvent(input$reset2,{
+    shinyWidgets::ask_confirmation(
+      inputId = "confirmReset2",
+      session = session,
+      title="Warning",
+      type = 'warning',
+      text="Reset all variables?",
+      btn_labels = c("Cancel", "Reset"),
+      btn_colors = c("#DDDDDD", "#FE2E2E"),
+      html=T,
+      closeOnClickOutside=T,
+      showCloseButton=T
+    )
+  })
+  
+  observeEvent(input$confirmReset2,{
+    if(input$confirmReset2){
+      updateSelectInput(session, 'outcome', label='Outcome Variable',choices = names(matchingData$data), selected=NA)
+      updateSelectInput(session, 'covariate', label='Covariates',choices = names(matchingData$data))
+      updateSelectInput(session, 'duration', label='Duration Variable',choices = names(matchingData$data))
+      updateSelectInput(session, 'strata', label='Stratification Variable',
+                        choices = names(matchingData$data[,!sapply(matchingData$data,is.numeric),with=F]),
+                        selected=NA)
+      output$renderUnmatcheResult <- renderUI(NULL)
+      output$renderMatchingResult <- renderUI(NULL)
+    }
+  })
+  
 }
+
 )
+
+
+

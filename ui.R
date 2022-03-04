@@ -4,9 +4,9 @@ shiny::shinyUI(dashboardPage(
     ),
   dashboardSidebar(
     sidebarMenu(
-      menuItem('Import Data', tabName='dataImport', icon = icon('file-csv',lib='font-awesome')),
-      menuItem('Matching', tabName='match',icon= icon('desktop')),
-      menuItem('Modeling', tabName='modeling', icon=icon('table',lib = 'font-awesome'))
+      menuItem('Import Data', tabName='dataImport', icon = icon('file-csv',lib='font-awesome',verify_fa = FALSE)),
+      menuItem('Matching', tabName='match',icon= icon('desktop',verify_fa = FALSE)),
+      menuItem('Modeling', tabName='modeling', icon=icon('table',lib = 'font-awesome', verify_fa = FALSE))
     )
   ),
   dashboardBody(
@@ -15,7 +15,7 @@ shiny::shinyUI(dashboardPage(
       tags$link(rel='stylesheet', type='text/css', href='boxShadow.css'),
     ),
     tabItems(
-      # import data --------------------------------------
+# 1. import data --------------------------------------
       tabItem(tabName='dataImport',
               h2('Import Data'),
               fluidRow(
@@ -57,13 +57,12 @@ shiny::shinyUI(dashboardPage(
                 box(
                   status = 'primary',
                   title= strong('Select variables'),
-                  selectInput('trt',"Treatment variable",
+                  shinyWidgets::pickerInput('trt',"Treatment variable",
                               choices=colnames(file)),
-                  selectInput('match','Matching variables', 
+                  shinyWidgets::pickerInput('match','Matching variables', 
                               choices = colnames(file),
-                              multiple = T,
-                              selectize = T)
-                
+                              options= list(`actions-box`=T),
+                              multiple = T)
                 ),
 
 # 2. setting parameter -------------------------------------------------------
@@ -71,7 +70,7 @@ shiny::shinyUI(dashboardPage(
                   title = strong('Parameters'),
                   status = 'primary',
                   tabsetPanel(
-                    type = 'pills',
+                    type='tabs',
                     tabPanel(
                       br(),
                       title=strong('Caliper'),
@@ -86,7 +85,7 @@ shiny::shinyUI(dashboardPage(
                       title = strong('Ratio'),
                       selectInput(inputId='ratioValue',
                                   label='Ratio',
-                                  choices = c(1, 2, 3,4,5),
+                                  choices = c(1, 2, 3, 4, 5),
                                   selected = 1)
                     )
                   )
@@ -97,85 +96,91 @@ shiny::shinyUI(dashboardPage(
                     actionButton(inputId='startMatching',
                                  label='Matching Start',
                                  icon = icon('play',lib = 'glyphicon'),
-                                 style="color: white;
-                                        background-color: #33ACFF;"
+                                 style="color: white; background-color: #33ACFF;"
                                  ),
                     actionButton(inputId='reset',
                                  label="Reset",
+                                 style="color: white; background-color: #FF6B6B;",
                                  icon = icon('repeat', lib = 'glyphicon',
                                              verify_fa = FALSE))
                 )
               ),
               br(),
+# 2. matching Info --------------------------------------------------------
+              fluidRow(
+                column(12, align='center',
+                  box(
+                    width=12,
+                    title = strong('Matching Information'),
+                    status = 'info',
+                    collapsible = T,
+                    uiOutput('renderMatchingInfo')
+                  )
+                )
+              ),
+              br(),
+
 # 2. matching result --------------------------------------
               fluidRow(
-                box(
-                  status="danger",
-                  width=6,
-                  height=400,
-                  collapsible = T,
-                  title=strong("Standard Mean Differences"),
-                  hidden(div(
-                    id='hidden2',
-                    plotOutput('lovePlot') %>% withSpinner(type=8, size=.3,hide.ui = F)
-                    )
+                column(12,
+                  box(
+                    title=strong("Standard Mean Differences"),
+                    status="danger",
+                    height=400,
+                    collapsible = T,
+                    collapsed = F,
+                    uiOutput('renderLovePlot')
+                  ),
+                  box(
+                    title=strong('Macthing variable'),
+                    status='danger',
+                    sidebar = boxSidebar(
+                      width = 30,
+                      background = "#0B3F6F",
+                      id='sidebar',
+                      selectInput("matchedVars","Matched variables",
+                                  choices = c(1,2)),
+                      actionButton('update','Update')
+                    ),
+                    collapsible = T,
+                    uiOutput(outputId = "renderMatchingVar")
                   )
                 ),
-                box(
-                  status='danger',
-                  sidebar = boxSidebar(
-                    width = 30,
-                    background = "#0B3F6F",
-                    id='sidebar',
-                    # startOpen = T,
-                    selectInput("matchedVars","Matched variables",
-                                choices = c(1,2)),
-                    actionButton('update','Update')
-                    # selectInput("type",'Plot type',
-                    #             choices = c('histogram',''))
-                  ),
-                  width=6,
-                  collapsible = T,
-                  title=strong('Macthing variable'),
-                  hidden(div(
-                    id='hidden1',
-                    plotOutput(outputId = "mResult") %>% 
-                      withSpinner(type=8, size=.3, hide.ui = F)
-                  ))
-                )
               )
-            )
-          ),
+              )
+      ), 
 
-# 3. matched result ---------------------------------------------------------
+# 3. Modeling  ---------------------------------------------------------
       tabItem(
         tabName = "modeling",
         h2('Modeling with regressions'),
         fluidRow(
           box(
             title = "Selection",
-            status='success',
+            status='primary',
             solidHeader = T,
             selectInput('outcome',"Outcome variable",
                         choices=colnames(file)),
             selectInput('covariate','Covariate variables',
                            choices = names(file),
                            multiple = T),
-            radioButtons("regType",'Choose Regression Type',
-                               choiceValues = list('logistic','cox'),
-                               choiceNames = list('Logistic','Cox'),
-                               inline=T
+            shinyWidgets::radioGroupButtons(
+              inputId = 'regType',
+              label = 'Choose Regression Type',
+              justified = T,
+              choices = c('Logistic','Cox'),
+              status="primary",
             ),
             conditionalPanel(
-              condition = "input.regType=='cox'",
+              condition = "input.regType=='Cox'",
               selectInput('duration','Duration variable',
                              selected=NULL,
                             
                              choices = names(file)),
             ),
-            checkboxInput('doStrata',
-                          label = "Stratification?",
-                          value = F),
+            shinyWidgets::materialSwitch('doStrata', value=F,
+                                         status='primary',
+                                      label = strong('Stratification')),
             conditionalPanel(
               condition='input.doStrata',
               selectInput('strata','Stratification variable',
@@ -183,35 +188,59 @@ shiny::shinyUI(dashboardPage(
                           selected = NA),
             ),
             actionButton('startReg','Run model',
-                         icon=icon('play',lib='glyphicon'))
+                         icon=icon('play',lib='glyphicon')),
+            actionButton('reset2','Reset',
+                         icon=icon('repeat', lib='glyphicon'),
+                         style="color: white; background-color: #FF6B6B;")
           ),
         ),
         fluidRow(
-          box(
-            # id='result',
-            title='Before Matching',
-            status = 'warning',
-            width=6,
-            conditionalPanel(
-              condition = "input.startReg",
-              # uiOutput('renderResult')
+            box(
+              # id='result',
+              width=6,
+              title='Before Matching',
+              status = 'warning',
+              conditionalPanel(
+                condition = "input.startReg",
+                withSpinner(uiOutput('renderUnmatcheResult'),
+                            type=8, size=.3,hide.ui = F)
+              ),
+              solidHeader = T,
+              collapsible = T
             ),
-            solidHeader = T,
-            collapsible = T
+            # box(
+            #   width = 6,
+            #   title = 'Kaplan-Meier',
+            #   status = 'warning',
+            #   solidHeader = T,
+            #   collapsible = T
+            # )
           ),
+        fluidRow(
           box(
             # id='result',
             title='After Matching',
             status = 'danger',
-            width=12,
+            width=6,
             conditionalPanel(
               condition = "input.startReg",
-              withSpinner(uiOutput('renderResult'),
+              withSpinner(uiOutput('renderMatchingResult'),
                           type=8, size=.3,hide.ui = F)
             ),
             solidHeader = T,
             collapsible = T
-          )
+          ),
+          # box(
+          #   width = 6,
+          #   title = 'Kaplan-Meier',
+          #   status = 'danger',
+          #   solidHeader = T,
+          #   collapsible = T,
+          #   conditionalPanel(
+          #     condition = "input.startReg",
+          #     uiOutput('renderMatchingKMPlot')
+          #   )
+          # )
         )
       )
     )
