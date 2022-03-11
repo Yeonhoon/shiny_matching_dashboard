@@ -6,6 +6,7 @@ shiny::shinyUI(dashboardPage(
     sidebarMenu(
       menuItem('Import Data', tabName='dataImport', icon = icon('file-csv',lib='font-awesome',verify_fa = FALSE)),
       menuItem('Matching', tabName='match',icon= icon('desktop',verify_fa = FALSE)),
+      menuItem('Visualization', tabName='visual', icon=icon('chart-line',lib = 'font-awesome', verify_fa = FALSE)),
       menuItem('Modeling', tabName='modeling', icon=icon('table',lib = 'font-awesome', verify_fa = FALSE))
     )
   ),
@@ -120,6 +121,20 @@ shiny::shinyUI(dashboardPage(
               ),
               br(),
 
+
+# 2. matching data.table --------------------------------------------------
+              fluidRow(
+                column(12, align='center',
+                       box(
+                         width=12,
+                         title = strong('Matched Data Table'),
+                         status = 'success',
+                         collapsible =T,
+                         uiOutput('renderMatchingTable')
+                       )
+                  )
+              ),
+              br(),
 # 2. matching result --------------------------------------
               fluidRow(
                 column(12,
@@ -132,7 +147,7 @@ shiny::shinyUI(dashboardPage(
                     uiOutput('renderLovePlot')
                   ),
                   box(
-                    title=strong('Macthing variable'),
+                    title=strong('Macthing variables'),
                     status='danger',
                     sidebar = boxSidebar(
                       width = 30,
@@ -150,7 +165,64 @@ shiny::shinyUI(dashboardPage(
               )
       ), 
 
-# 3. Modeling  ---------------------------------------------------------
+      tabItem(
+        tabName = 'visual',
+        h2('Kaplan-Meier Curve'),
+        fluidRow(
+          box(
+            title=strong("Variables"),
+            status='primary',
+            selectInput('kmOutcome','Outcome variable',
+                        choice= colnames(file)),
+            selectInput('kmDuration', 'Time variable',
+                        choice = colnames(file)),
+            selectInput('kmGroup','Group variable',
+                        choice= colnames(file)),
+            actionButton('drawKM',label = 'Draw KM')
+          ),
+          box(
+            title = strong('Options'),
+            status = 'primary',
+            selectInput('kmFun','Type', choices = c('Survival'='pct','Event'='event'),
+                        selected='pct'),
+
+            shinyWidgets::prettyCheckbox('kmCensor', 'Draw Censor',
+                                         status = 'primary',
+                                         outline=T,
+                                         icon = icon('check-square-o'),
+                                         animation = 'jelly'),
+            shinyWidgets::prettyCheckbox('kmPvalue', 'Show p-value',
+                                         status = 'primary',
+                                         outline=T,
+                                         icon = icon('check-square-o'),
+                                         animation = 'jelly'),
+            shinyWidgets::prettyCheckbox('kmRiskTable', 'Risk Table',
+                                         status = 'primary',
+                                         outline=T,
+                                         icon = icon('check-square-o'),
+                                         animation = 'jelly'),
+            sliderInput('kmXaxis','X axis range',
+                        value = 0,
+                        min=0, max=1,
+                        dragRange = T),
+            sliderInput('kmYaxis','Y axis range',
+                        value = 0,
+                        min=0, max=1,
+                        dragRange = T)
+          )
+        ),
+        fluidRow(
+          box(
+            width=12,
+            collapsible = T,
+            status = 'danger',
+            title=strong('Kaplan-Meier Curve'),
+            uiOutput('renderKMplot')
+          )
+        )
+      ),
+
+# 4. Modeling  ---------------------------------------------------------
       tabItem(
         tabName = "modeling",
         h2('Modeling with regressions'),
@@ -197,7 +269,7 @@ shiny::shinyUI(dashboardPage(
         fluidRow(
             box(
               # id='result',
-              width=6,
+              width=12,
               title='Before Matching',
               status = 'warning',
               conditionalPanel(
@@ -221,7 +293,7 @@ shiny::shinyUI(dashboardPage(
             # id='result',
             title='After Matching',
             status = 'danger',
-            width=6,
+            width=12,
             conditionalPanel(
               condition = "input.startReg",
               withSpinner(uiOutput('renderMatchingResult'),

@@ -173,7 +173,7 @@ shiny::shinyServer(function(input, output, session){
                       choices = vars)
   })
   
-  # matching info
+  # matching info ----------------------------------------
   observeEvent(input$startMatching, {
     output$matchingInfo <- renderPrint({
       print(result())
@@ -182,7 +182,32 @@ shiny::shinyServer(function(input, output, session){
     output$renderMatchingInfo <- renderUI({
       verbatimTextOutput('matchingInfo')
     })
+    
+    output$matchingTable <- function(){
+      rst <- tableone::CreateTableOne(
+        data = matchingData$data,
+        vars = input$match,
+        strata = input$trt,
+        addOverall = T,
+        smd = T,
+        test = T
+      ) 
+      print(rst, smd=T, catDigits=1, contDigits=1) %>% 
+        kableone() %>% 
+        kableExtra::kable_styling(bootstrap_options = c('striped',
+                                                        'condensed',
+                                                        'responsive')) %>% 
+        kableExtra::kable_classic(html_font='Cambria')
+    }
+    
+    output$renderMatchingTable <- renderUI({
+      htmlOutput('matchingTable')
+    })
+    
+
   })
+  
+  
   
   # loveplot --------------------------------
   observeEvent(input$startMatching,{
@@ -248,20 +273,12 @@ shiny::shinyServer(function(input, output, session){
   })  
       
   observeEvent(input$update,{
-      # output$mResult <- renderPlot({
-      #   cobalt::bal.plot(result(),
-      #                    var.name=input$matchedVars,
-      #                    which = 'both',
-      #                    themes = ggthemes::theme_stata() + 
-      #                      theme(axis.text.y = element_text(angle=0,size=13,family = 'serif'),
-      #                            axis.text.x= element_text(size=13, family='serif'),
-      #                            legend.text = element_text(size=13)) )
-      # })
-      
       output$renderMatchingVar <- renderUI({
         plotOutput('mResult')
       })
   })
+
+
 
 
 # result -------------------------------------------------------------------------
@@ -272,6 +289,12 @@ shiny::shinyServer(function(input, output, session){
                                     distance = 'prop.score', 
                                     weights = 'wt',
                                     subclass = 'sc')
+    # KM plot 
+    updateSelectInput(session=session, inputId = 'kmOutcome', label='Outcome variable',choices = names(matchingData$data),selected=NA)
+    updateSelectInput(session=session, inputId = 'kmGroup', label='Group variable',choices = names(matchingData$data),selected=NA)
+    updateSelectInput(session=session, inputId = 'kmDuration', label='Time variable',choices = names(matchingData$data),selected=NA)
+    
+    # modeling  
     updateSelectInput(session, 'outcome', label='Outcome Variable',choices = names(matchingData$data), selected=NA)
     updateSelectInput(session, 'covariate', label='Covariates',choices = names(matchingData$data))
     updateSelectInput(session, 'duration', label='Duration Variable',choices = names(matchingData$data))
@@ -279,6 +302,49 @@ shiny::shinyServer(function(input, output, session){
                       choices = names(matchingData$data[,!sapply(matchingData$data,is.numeric),with=F]),
                       selected=NA)
   })
+  
+  # Kmplot
+  kmFit <- eventReactive(input$drawKM,{
+    temp <- paste0('survfit(Surv(', input$kmDuration, 
+                   ",",input$kmOutcome,')~', input$kmGroup, ', matchingData$data)')
+    myEval(temp)
+  })
+  
+  observeEvent(input$drawKM,{
+    
+    #update range
+    updateSliderInput(session, 'kmXaxis', 
+                      label = 'X axis range',
+                      min = 0,
+                      max = max(matchingData$data[[input$kmDuration]]))
+    updateSliderInput(session, 'kmYaxis', 
+                      label = 'Y axis range',
+                      min= 0,
+                      max=1)
+    
+    output$KMplot <- renderPlot({
+      survminer::ggsurvplot(kmFit(),
+                            censor = input$kmCensor,
+                            risk.table = input$kmRiskTable,
+                            pval = input$kmPvalue,
+                            data=matchingData$data,
+                            xlim = c(0,input$kmXaxis),
+                            ylim = c(0,input$kmYaxis))
+    })
+
+  })
+  # 
+  output$renderKMplot <- renderUI({
+    plotOutput('KMplot')
+  })
+  # 
+  # TODO
+  # 그래프 side bar에서 x축 범위 조정하기 (eventReactive로)
+  # selectInput 에서 ggsurvplot parameter 옵션 부여
+  # box에 survplot 사후검정. post-hoc log rank test 결과까지 출력.
+  
+  
+  
   
 # Create formula ------------------------------------------------
   
