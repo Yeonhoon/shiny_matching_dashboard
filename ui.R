@@ -205,6 +205,8 @@ shiny::shinyUI(dashboardPage(
                         value = 0,
                         min=0, max=1,
                         dragRange = T),
+            numericInput('kmXbreak','Break Time by',
+                      value = 100),
             sliderInput('kmYaxis','Y axis range',
                         value = 0,
                         min=0, max=1,

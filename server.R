@@ -316,9 +316,11 @@ shiny::shinyServer(function(input, output, session){
     updateSliderInput(session, 'kmXaxis', 
                       label = 'X axis range',
                       min = 0,
-                      max = max(matchingData$data[[input$kmDuration]]))
+                      max = max(matchingData$data[[input$kmDuration]]),
+                      value = max(matchingData$data[[input$kmDuration]]))
     updateSliderInput(session, 'kmYaxis', 
                       label = 'Y axis range',
+                      value = 1,
                       min= 0,
                       max=1)
     
@@ -329,7 +331,9 @@ shiny::shinyServer(function(input, output, session){
                             pval = input$kmPvalue,
                             data=matchingData$data,
                             xlim = c(0,input$kmXaxis),
-                            ylim = c(0,input$kmYaxis))
+                            ylim = c(0,input$kmYaxis),
+                            break.time.by = as.numeric(input$kmXbreak)
+                            )
     })
 
   })
